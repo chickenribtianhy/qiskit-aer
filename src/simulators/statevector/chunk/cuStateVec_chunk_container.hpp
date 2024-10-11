@@ -19,6 +19,8 @@
 
 #include "custatevec.h"
 
+#include <iostream>
+
 namespace AER {
 namespace QV {
 namespace Chunk {
@@ -107,7 +109,11 @@ public:
 int cuStateVecChunkContainer_MemPoolAlloc(void *ctx, void **ptr, size_t size,
                                           cudaStream_t stream) {
   cudaMemPool_t &pool = *static_cast<cudaMemPool_t *>(ctx);
+  std::cout << "using cudaMallocFromPoolAsync" << std::endl;
   cudaError_t status = cudaMallocFromPoolAsync(ptr, size, pool, stream);
+
+  // std::cout << "using cudaMallocAsync" << std::endl;
+  // cudaError_t status = cudaMallocAsync(ptr, size, stream);
   return (int)status;
 }
 
