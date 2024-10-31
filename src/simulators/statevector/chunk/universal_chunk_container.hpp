@@ -12,34 +12,42 @@
  * that they have been altered from the originals.
  */
 
-#ifndef _qv_host_chunk_container_hpp_
-#define _qv_host_chunk_container_hpp_
+#ifndef _qv_universal_chunk_container_hpp_
+#define _qv_universal_chunk_container_hpp_
 
 #include "simulators/statevector/chunk/chunk_container.hpp"
 
 #include <iostream>
+#include <thrust/complex.h>
+#include <thrust/cuda/universal_allocator.h>
+#include <thrust/device_vector.h>
 
 namespace AER {
 namespace QV {
 namespace Chunk {
 
 //============================================================================
-// host chunk container class
+// Universal chunk container class with UniversalAllocator
 //============================================================================
 template <typename data_t>
-class HostChunkContainer : public ChunkContainer<data_t> {
+class UniversalChunkContainer : public ChunkContainer<data_t> {
 protected:
-  AERHostVector<thrust::complex<data_t>>
-      data_; // host vector for chunks + buffers
-  mutable std::vector<thrust::complex<double> *> matrix_; // pointer to matrix
-  mutable std::vector<uint_t *> params_; // pointer to additional parameters
+  typedef thrust::cuda::universal_allocator<thrust::complex<data_t>>
+      UniversalAllocator;
+  typedef thrust::device_vector<thrust::complex<data_t>, UniversalAllocator>
+      UniversalVector;
+  UniversalVector data_; // Universal vector for chunks + buffers
+  mutable std::vector<thrust::complex<double> *>
+      matrix_;                           // Pointers to matrices
+  mutable std::vector<uint_t *> params_; // Pointers to additional parameters
+
 public:
-  HostChunkContainer() {}
-  ~HostChunkContainer();
+  UniversalChunkContainer() {}
+  ~UniversalChunkContainer();
 
   uint_t size(void) { return data_.size(); }
 
-  AERHostVector<thrust::complex<data_t>> &vector(void) { return data_; }
+  UniversalVector &vector(void) { return data_; }
 
   thrust::complex<data_t> &operator[](uint_t i) { return data_[i]; }
 
@@ -69,11 +77,11 @@ public:
   thrust::complex<data_t> Get(uint_t i) const override { return data_[i]; }
 
   thrust::complex<data_t> *chunk_pointer(uint_t iChunk) const override {
-    return (thrust::complex<data_t> *)thrust::raw_pointer_cast(data_.data()) +
+    return thrust::raw_pointer_cast(data_.data()) +
            (iChunk << this->chunk_bits_);
   }
   thrust::complex<data_t> *buffer_pointer(void) const {
-    return (thrust::complex<data_t> *)thrust::raw_pointer_cast(data_.data()) +
+    return thrust::raw_pointer_cast(data_.data()) +
            (this->num_chunks_ << this->chunk_bits_);
   }
 
@@ -87,7 +95,7 @@ public:
 
   bool peer_access(int i_dest) {
 #ifdef AER_ATS
-    // for IBM AC922
+    // For IBM AC922
     return true;
 #else
     return false;
@@ -112,16 +120,14 @@ public:
 };
 
 template <typename data_t>
-HostChunkContainer<data_t>::~HostChunkContainer(void) {
+UniversalChunkContainer<data_t>::~UniversalChunkContainer(void) {
   Deallocate();
 }
 
 template <typename data_t>
-uint_t HostChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
-                                            int num_qubits, uint_t chunks,
-                                            uint_t buffers, bool multi_shots,
-                                            int matrix_bit, int max_shots,
-                                            bool density_matrix) {
+uint_t UniversalChunkContainer<data_t>::Allocate(
+    int idev, int chunk_bits, int num_qubits, uint_t chunks, uint_t buffers,
+    bool multi_shots, int matrix_bit, int max_shots, bool density_matrix) {
   uint_t nc = chunks;
 
   ChunkContainer<data_t>::chunk_bits_ = chunk_bits;
@@ -130,7 +136,7 @@ uint_t HostChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
 
   ChunkContainer<data_t>::num_buffers_ = buffers;
   ChunkContainer<data_t>::num_chunks_ = nc;
-  std::cout << "HostChunkContainer::Allocate" << std::endl;
+  std::cout << "UniversalChunkContainer::Allocate" << std::endl;
   if (nc + buffers > 0) {
     data_.resize((nc + buffers) << chunk_bits);
   }
@@ -139,7 +145,7 @@ uint_t HostChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
     params_.resize(nc + buffers);
   }
 
-  // allocate chunk classes
+  // Allocate chunk classes
   if (nc + buffers > 0)
     ChunkContainer<data_t>::allocate_chunks();
 
@@ -147,7 +153,7 @@ uint_t HostChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
 }
 
 template <typename data_t>
-void HostChunkContainer<data_t>::Deallocate(void) {
+void UniversalChunkContainer<data_t>::Deallocate(void) {
   data_.clear();
   data_.shrink_to_fit();
   matrix_.clear();
@@ -159,7 +165,8 @@ void HostChunkContainer<data_t>::Deallocate(void) {
 }
 
 template <typename data_t>
-void HostChunkContainer<data_t>::CopyIn(Chunk<data_t> &src, uint_t iChunk) {
+void UniversalChunkContainer<data_t>::CopyIn(Chunk<data_t> &src,
+                                             uint_t iChunk) {
   uint_t size = 1ull << this->chunk_bits_;
 
   if (src.device() >= 0) {
@@ -170,8 +177,8 @@ void HostChunkContainer<data_t>::CopyIn(Chunk<data_t> &src, uint_t iChunk) {
                        (src.pos() << this->chunk_bits_),
                    size, data_.begin() + (iChunk << this->chunk_bits_));
   } else {
-    auto src_cont =
-        std::static_pointer_cast<HostChunkContainer<data_t>>(src.container());
+    auto src_cont = std::static_pointer_cast<UniversalChunkContainer<data_t>>(
+        src.container());
 
     thrust::copy_n(src_cont->vector().begin() +
                        (src.pos() << this->chunk_bits_),
@@ -180,7 +187,8 @@ void HostChunkContainer<data_t>::CopyIn(Chunk<data_t> &src, uint_t iChunk) {
 }
 
 template <typename data_t>
-void HostChunkContainer<data_t>::CopyOut(Chunk<data_t> &dest, uint_t iChunk) {
+void UniversalChunkContainer<data_t>::CopyOut(Chunk<data_t> &dest,
+                                              uint_t iChunk) {
   uint_t size = 1ull << this->chunk_bits_;
   if (dest.device() >= 0) {
     dest.set_device();
@@ -190,8 +198,8 @@ void HostChunkContainer<data_t>::CopyOut(Chunk<data_t> &dest, uint_t iChunk) {
                    dest_cont->vector().begin() +
                        (dest.pos() << this->chunk_bits_));
   } else {
-    auto dest_cont =
-        std::static_pointer_cast<HostChunkContainer<data_t>>(dest.container());
+    auto dest_cont = std::static_pointer_cast<UniversalChunkContainer<data_t>>(
+        dest.container());
 
     thrust::copy_n(data_.begin() + (iChunk << this->chunk_bits_), size,
                    dest_cont->vector().begin() +
@@ -200,8 +208,8 @@ void HostChunkContainer<data_t>::CopyOut(Chunk<data_t> &dest, uint_t iChunk) {
 }
 
 template <typename data_t>
-void HostChunkContainer<data_t>::CopyIn(thrust::complex<data_t> *src,
-                                        uint_t iChunk, uint_t size) {
+void UniversalChunkContainer<data_t>::CopyIn(thrust::complex<data_t> *src,
+                                             uint_t iChunk, uint_t size) {
   uint_t this_size = 1ull << this->chunk_bits_;
   if (this_size < size)
     throw std::runtime_error("CopyIn chunk size is less than provided size");
@@ -210,42 +218,35 @@ void HostChunkContainer<data_t>::CopyIn(thrust::complex<data_t> *src,
 }
 
 template <typename data_t>
-void HostChunkContainer<data_t>::CopyOut(thrust::complex<data_t> *dest,
-                                         uint_t iChunk, uint_t size) {
+void UniversalChunkContainer<data_t>::CopyOut(thrust::complex<data_t> *dest,
+                                              uint_t iChunk, uint_t size) {
   uint_t this_size = 1ull << this->chunk_bits_;
   if (this_size < size)
-    throw std::runtime_error("CopyIn chunk size is less than provided size");
+    throw std::runtime_error("CopyOut chunk size is less than provided size");
 
   thrust::copy_n(data_.begin() + (iChunk << this->chunk_bits_), size, dest);
 }
 
 template <typename data_t>
-void HostChunkContainer<data_t>::Swap(Chunk<data_t> &src, uint_t iChunk,
-                                      uint_t dest_offset, uint_t src_offset,
-                                      uint_t size_in, bool write_back) {
+void UniversalChunkContainer<data_t>::Swap(Chunk<data_t> &src, uint_t iChunk,
+                                           uint_t dest_offset,
+                                           uint_t src_offset, uint_t size_in,
+                                           bool write_back) {
   uint_t size = size_in;
   if (size == 0)
     size = 1ull << this->chunk_bits_;
-  //  if(src.device() >= 0){
-  //    src.swap(*this,dest_offset,src_offset,size_in,write_back);
-  //  }
-  //  else{
-  auto src_cont =
-      std::static_pointer_cast<HostChunkContainer<data_t>>(src.container());
+
+  auto src_cont = std::static_pointer_cast<UniversalChunkContainer<data_t>>(
+      src.container());
 
   this->Execute(BufferSwap_func<data_t>(chunk_pointer(iChunk) + dest_offset,
                                         src.pointer() + src_offset, size,
                                         write_back),
                 iChunk, 0, 1);
-  //    thrust::swap_ranges(thrust::omp::par,data_.begin() + (iChunk <<
-  //    this->chunk_bits_) + dest_offset,data_.begin() + (iChunk <<
-  //    this->chunk_bits_) + dest_offset + size,src_cont->vector().begin() +
-  //    (src.pos() << this->chunk_bits_) + src_offset);
-  //  }
 }
 
 template <typename data_t>
-void HostChunkContainer<data_t>::Zero(uint_t iChunk, uint_t count) {
+void UniversalChunkContainer<data_t>::Zero(uint_t iChunk, uint_t count) {
 #ifndef AER_THRUST_ROCM_DISABLE_THRUST_OMP
   thrust::fill_n(thrust::omp::par,
                  data_.begin() + (iChunk << this->chunk_bits_), count, 0.0);
@@ -253,7 +254,7 @@ void HostChunkContainer<data_t>::Zero(uint_t iChunk, uint_t count) {
 }
 
 template <typename data_t>
-reg_t HostChunkContainer<data_t>::sample_measure(
+reg_t UniversalChunkContainer<data_t>::sample_measure(
     uint_t iChunk, const std::vector<double> &rnds, uint_t stride, bool dot,
     uint_t count) const {
   const int_t SHOTS = rnds.size();

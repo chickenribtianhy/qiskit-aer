@@ -22,7 +22,6 @@
 #include <spdlog/spdlog.h>
 
 #include <iostream>
-#include <thrust/universal_vector.h>
 
 namespace AER {
 namespace QV {
@@ -38,7 +37,6 @@ protected:
   std::vector<std::shared_ptr<ChunkContainer<data_t>>>
       chunks_; // chunk containers for each device and host
 
-  // thrust::universal_vector<data_t> y;
   uint_t num_devices_; // number of devices
   uint_t num_places_;  // number of places (devices + host)
 
