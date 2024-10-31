@@ -17,6 +17,7 @@
 
 #include "simulators/statevector/chunk/device_chunk_container.hpp"
 #include "simulators/statevector/chunk/host_chunk_container.hpp"
+#include "simulators/statevector/chunk/universal_chunk_container.hpp"
 
 #ifdef AER_CUSTATEVEC
 #include "simulators/statevector/chunk/cuStateVec_chunk_container.hpp"

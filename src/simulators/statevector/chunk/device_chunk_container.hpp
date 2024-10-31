@@ -30,7 +30,7 @@ namespace thrust_gpu = thrust::hip;
 #include <iostream>
 
 #include <thrust/system/cuda/memory.h>
-#include <thrust/universal_vector.h>
+// #include <thrust/universal_vector.h>
 
 namespace AER {
 namespace QV {
@@ -52,8 +52,8 @@ protected:
   //     UniversalAllocator;
   // typedef thrust::device_vector<thrust::complex<data_t>, UniversalAllocator>
   //     UniversalVector;
-#define AERUniversalVector thrust::universal_vector
-  AERUniversalVector<thrust::complex<data_t>> data_test; // Universal vector for chunks + buffers
+// #define AERUniversalVector thrust::universal_vector
+//   AERUniversalVector<thrust::complex<data_t>> data_test; // Universal vector for chunks + buffers
   AERDeviceVector<thrust::complex<data_t>> data_;
   // storage for large matrix
   mutable AERDeviceVector<thrust::complex<double>> matrix_;

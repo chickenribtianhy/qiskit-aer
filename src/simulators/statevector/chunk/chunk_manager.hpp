@@ -188,6 +188,8 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     multi_gpu = true;
     num_places_ = num_devices_;
   }
+  // std::cout << "multi_gpu: " << multi_gpu << std::endl;
+  // std::cout << "num_devices_: " << num_devices_ << std::endl;
 #endif
   str = getenv("AER_HYBRID");
   if (str) {
@@ -333,7 +335,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     uint_t chunks_allocated = 0;
     // #pragma omp parallel for if(num_places_ == num_devices_)
     // private(is,ie,nc) reduction(+:chunks_allocated)
-    for (iDev = 0; iDev < num_places_; iDev++) {
+    /* for (iDev = 0; iDev < num_places_; iDev++) {
       is = num_chunks_ * (uint_t)iDev / (uint_t)num_places_;
       ie = num_chunks_ * (uint_t)(iDev + 1) / (uint_t)num_places_;
       nc = ie - is;
@@ -356,7 +358,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
             iDev, chunk_bits, nqubits, nc, num_buffers, multi_shots_,
             matrix_bit, max_shots, density_matrix_);
       }
-    }
+    } */
     if (chunks_allocated < num_chunks_) {
       uint_t nplaces_add = num_places_;
       if ((num_chunks_ - chunks_allocated) < nplaces_add)
@@ -369,7 +371,8 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
              (uint_t)nplaces_add;
         nc = ie - is;
         if (nc > 0) {
-          chunks_.push_back(std::make_shared<HostChunkContainer<data_t>>());
+          // chunks_.push_back(std::make_shared<HostChunkContainer<data_t>>());
+          chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
           chunks_[chunks_.size() - 1]->set_chunk_index(
               chunk_index_ + chunks_allocated +
               is); // set first chunk index for the container
