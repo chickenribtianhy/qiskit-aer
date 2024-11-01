@@ -332,6 +332,8 @@ uint_t DeviceChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
                                               uint_t buffers, bool multi_shots,
                                               int matrix_bit, int max_shots,
                                               bool density_matrix) {
+
+  std::cout << "DeviceChunkContainer::Allocate" << std::endl;
   uint_t nc = chunks;
   uint_t i;
 
@@ -400,9 +402,9 @@ uint_t DeviceChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
 
   size_t freeMem, totalMem;
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "DeviceChunkContainer::Allocate : initial status : "
-            << "freeMem: " << freeMem * 1.0 / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem * 1.0 / (1024 * 1024 * 1024) << std::endl;
+  // std::cout << "DeviceChunkContainer::Allocate : initial status : "
+  //           << "freeMem: " << freeMem * 1.0 / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem * 1.0 / (1024 * 1024 * 1024) << std::endl;
   freeMem -= RESERVE_FOR_THRUST;
   while (freeMem <= ((((nc + buffers) * (uint_t)sizeof(thrust::complex<data_t>))
                       << chunk_bits) +

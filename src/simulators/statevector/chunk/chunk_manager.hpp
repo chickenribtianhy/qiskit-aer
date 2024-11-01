@@ -188,8 +188,8 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     multi_gpu = true;
     num_places_ = num_devices_;
   }
-  // std::cout << "multi_gpu: " << multi_gpu << std::endl;
-  // std::cout << "num_devices_: " << num_devices_ << std::endl;
+  std::cout << "ChunkManager::Allocate : multi_gpu: " << multi_gpu << std::endl;
+  std::cout << "ChunkManager::Allocate : num_devices_: " << num_devices_ << std::endl;
 #endif
   str = getenv("AER_HYBRID");
   if (str) {
@@ -316,7 +316,8 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     if (num_chunks_ < num_places_) {
       num_places_ = num_chunks_;
     }
-
+    std::cout << "ChunkManager::Allocate : num_chunks_: " << num_chunks_ << std::endl;
+    std::cout << "ChunkManager::Allocate : num_places_: " << num_places_ << std::endl;
     // allocate chunk container before parallel loop using push_back to store
     // shared pointer
     for (i = 0; i < num_places_; i++) {
@@ -333,9 +334,11 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     }
 
     uint_t chunks_allocated = 0;
+    // uint_t t = num_places_;
+    // num_places_ = 0;
     // #pragma omp parallel for if(num_places_ == num_devices_)
     // private(is,ie,nc) reduction(+:chunks_allocated)
-    /* for (iDev = 0; iDev < num_places_; iDev++) {
+    for (iDev = 0; iDev < num_places_; iDev++) {
       is = num_chunks_ * (uint_t)iDev / (uint_t)num_places_;
       ie = num_chunks_ * (uint_t)(iDev + 1) / (uint_t)num_places_;
       nc = ie - is;
@@ -350,6 +353,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
       chunks_[iDev]->set_num_creg_bits(num_creg_bits_);
       if (num_devices_ > 0) {
         int id = target_gpus_[(iDev + idev_start) % num_devices_];
+        std::cout << "ChunkManager::Allocate : id: " << id << std::endl;
         chunks_allocated += chunks_[iDev]->Allocate(
             id, chunk_bits, nqubits, nc, num_buffers, multi_shots_, matrix_bit,
             max_shots, density_matrix_);
@@ -358,7 +362,10 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
             iDev, chunk_bits, nqubits, nc, num_buffers, multi_shots_,
             matrix_bit, max_shots, density_matrix_);
       }
-    } */
+    }
+    // num_places_ = t;
+    std::cout << "ChunkManager::Allocate : chunks_allocated: " << chunks_allocated << std::endl;
+    std::cout << "ChunkManager::Allocate : num_places_: " << num_places_ << std::endl;
     if (chunks_allocated < num_chunks_) {
       uint_t nplaces_add = num_places_;
       if ((num_chunks_ - chunks_allocated) < nplaces_add)
@@ -377,7 +384,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
               chunk_index_ + chunks_allocated +
               is); // set first chunk index for the container
           chunks_[chunks_.size() - 1]->Allocate(
-              -1, chunk_bits, nqubits, nc, num_buffers, multi_shots_,
+              iDev, chunk_bits, nqubits, nc, num_buffers, multi_shots_,
               matrix_bit, max_shots, density_matrix_);
         }
       }

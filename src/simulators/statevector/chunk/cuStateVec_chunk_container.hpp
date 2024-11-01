@@ -18,6 +18,7 @@
 #include "simulators/statevector/chunk/device_chunk_container.hpp"
 
 #include "custatevec.h"
+#include<iostream>
 
 namespace AER {
 namespace QV {
@@ -131,6 +132,7 @@ uint_t cuStateVecChunkContainer<data_t>::Allocate(
   nc = BaseContainer::Allocate(idev, chunk_bits, num_qubits, chunks, buffers,
                                multi_shots, matrix_bit, max_shots,
                                density_matrix);
+  std::cout << "cuStateVecChunkContainer::Allocate" << std::endl;
   // initialize custatevevtor handle
   custatevecStatus_t err;
 

@@ -122,6 +122,7 @@ uint_t HostChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
                                             uint_t buffers, bool multi_shots,
                                             int matrix_bit, int max_shots,
                                             bool density_matrix) {
+  std::cout << "HostChunkContainer::Allocate" << std::endl;
   uint_t nc = chunks;
 
   ChunkContainer<data_t>::chunk_bits_ = chunk_bits;
@@ -130,7 +131,6 @@ uint_t HostChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
 
   ChunkContainer<data_t>::num_buffers_ = buffers;
   ChunkContainer<data_t>::num_chunks_ = nc;
-  std::cout << "HostChunkContainer::Allocate" << std::endl;
   if (nc + buffers > 0) {
     data_.resize((nc + buffers) << chunk_bits);
   }
