@@ -22,7 +22,7 @@
 #include <spdlog/spdlog.h>
 
 #include <iostream>
-#include <thrust/universal_vector.h>
+// #include <thrust/universal_vector.h>
 
 namespace AER {
 namespace QV {
@@ -253,7 +253,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
           num_places_ = 1;
           idev_start = 0;
 
-          // define device to be allocated
+          // define device to be allocated, by checking which device has the max free memory 
           if (num_devices_ > 1) {
             size_t freeMem, totalMem, maxMem;
             cudaSetDevice(0);
@@ -327,15 +327,15 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
         continue;
       } else {
 #endif
-        chunks_.push_back(std::make_shared<DeviceChunkContainer<data_t>>());
+        // chunks_.push_back(std::make_shared<DeviceChunkContainer<data_t>>());
+        chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
 #ifdef AER_CUSTATEVEC
       }
 #endif
     }
+    // leading to segmentation fault if deleted
 
     uint_t chunks_allocated = 0;
-    // uint_t t = num_places_;
-    // num_places_ = 0;
     // #pragma omp parallel for if(num_places_ == num_devices_)
     // private(is,ie,nc) reduction(+:chunks_allocated)
     for (iDev = 0; iDev < num_places_; iDev++) {
@@ -363,7 +363,6 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
             matrix_bit, max_shots, density_matrix_);
       }
     }
-    // num_places_ = t;
     std::cout << "ChunkManager::Allocate : chunks_allocated: " << chunks_allocated << std::endl;
     std::cout << "ChunkManager::Allocate : num_places_: " << num_places_ << std::endl;
     if (chunks_allocated < num_chunks_) {
@@ -378,8 +377,9 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
              (uint_t)nplaces_add;
         nc = ie - is;
         if (nc > 0) {
-          // chunks_.push_back(std::make_shared<HostChunkContainer<data_t>>());
           chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
+          // chunks_.push_back(std::make_shared<HostChunkContainer<data_t>>());
+          // chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
           chunks_[chunks_.size() - 1]->set_chunk_index(
               chunk_index_ + chunks_allocated +
               is); // set first chunk index for the container

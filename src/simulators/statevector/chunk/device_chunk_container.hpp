@@ -52,8 +52,9 @@ protected:
   //     UniversalAllocator;
   // typedef thrust::device_vector<thrust::complex<data_t>, UniversalAllocator>
   //     UniversalVector;
-// #define AERUniversalVector thrust::universal_vector
-//   AERUniversalVector<thrust::complex<data_t>> data_test; // Universal vector for chunks + buffers
+  // #define AERUniversalVector thrust::universal_vector
+  //   AERUniversalVector<thrust::complex<data_t>> data_test; // Universal
+  //   vector for chunks + buffers
   AERDeviceVector<thrust::complex<data_t>> data_;
   // storage for large matrix
   mutable AERDeviceVector<thrust::complex<double>> matrix_;
@@ -404,7 +405,8 @@ uint_t DeviceChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
   cudaMemGetInfo(&freeMem, &totalMem);
   // std::cout << "DeviceChunkContainer::Allocate : initial status : "
   //           << "freeMem: " << freeMem * 1.0 / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem * 1.0 / (1024 * 1024 * 1024) << std::endl;
+  //           << " totalMem: " << totalMem * 1.0 / (1024 * 1024 * 1024) <<
+  //           std::endl;
   freeMem -= RESERVE_FOR_THRUST;
   while (freeMem <= ((((nc + buffers) * (uint_t)sizeof(thrust::complex<data_t>))
                       << chunk_bits) +
