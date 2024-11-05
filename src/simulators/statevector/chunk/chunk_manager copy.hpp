@@ -370,6 +370,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
       uint_t nplaces_add = num_places_;
       if ((num_chunks_ - chunks_allocated) < nplaces_add)
         nplaces_add = (num_chunks_ - chunks_allocated);
+      std::cout << "ChunkManager::Allocate : nplaces_add: " << nplaces_add << std::endl;
       // rest of chunks are stored on host
       for (iDev = 0; iDev < nplaces_add; iDev++) {
         is = (num_chunks_ - chunks_allocated) * (uint_t)iDev /

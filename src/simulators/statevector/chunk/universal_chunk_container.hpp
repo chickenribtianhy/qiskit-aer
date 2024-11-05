@@ -350,8 +350,10 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
 
   this->density_matrix_ = density_matrix;
 
-  device_id_ = idev;
-  set_device();
+  if (idev != -1) {
+    device_id_ = idev;
+    set_device();
+  }
 
 #ifdef AER_THRUST_GPU
   int ip, nd;
@@ -485,7 +487,10 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
             << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
   // allocate chunk classes
   ChunkContainer<data_t>::allocate_chunks();
-
+  cudaMemGetInfo(&freeMem, &totalMem);
+  std::cout << "UniversalChunkContainer::Allocate : after allocate_chunks : "
+            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
   return nc;
 }
 
