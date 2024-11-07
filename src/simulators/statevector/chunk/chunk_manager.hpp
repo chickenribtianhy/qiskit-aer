@@ -172,7 +172,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
                                       int matrix_bit, int max_shots,
                                       bool density_mat, reg_t &gpus,
                                       bool enable_cuStatevec) {
-  std::cout << "ChunkManager::Allocate" << std::endl;
+  std::cout << "ChunkManager::Allocate START" << std::endl;
   uint_t num_buffers;
   uint_t iDev;
   uint_t is, ie, nc;
@@ -321,20 +321,9 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     // allocate chunk container before parallel loop using push_back to store
     // shared pointer
     for (i = 0; i < num_places_; i++) {
-#ifdef AER_CUSTATEVEC
-      if (enable_cuStatevec_) { // allocate cuStateVec chunk
-        chunks_.push_back(std::make_shared<cuStateVecChunkContainer<data_t>>());
-        continue;
-      } else {
-#endif
-        // chunks_.push_back(std::make_shared<DeviceChunkContainer<data_t>>());
         std::cout << "ChunkManager::Allocate : num_places_ (i) push_back to chunks_: " << i << std::endl;
         chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
-#ifdef AER_CUSTATEVEC
-      }
-#endif
     }
-    // leading to segmentation fault if deleted
 
     uint_t chunks_allocated = 0;
     // #pragma omp parallel for if(num_places_ == num_devices_)
@@ -355,6 +344,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
       if (num_devices_ > 0) {
         int id = target_gpus_[(iDev + idev_start) % num_devices_];
         std::cout << "ChunkManager::Allocate : id: " << id << std::endl;
+        std::cout << "ChunkManager::Allocate : nc: " << nc << std::endl;
         chunks_allocated += chunks_[iDev]->Allocate(
             id, chunk_bits, nqubits, nc, num_buffers, multi_shots_, matrix_bit,
             max_shots, density_matrix_);
@@ -366,33 +356,7 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     }
     std::cout << "ChunkManager::Allocate : chunks_allocated: " << chunks_allocated << std::endl;
     std::cout << "ChunkManager::Allocate : num_places_: " << num_places_ << std::endl;
-    if (chunks_allocated < num_chunks_) {
-      uint_t nplaces_add = num_places_;
-      if ((num_chunks_ - chunks_allocated) < nplaces_add)
-        nplaces_add = (num_chunks_ - chunks_allocated);
-      std::cout << "ChunkManager::Allocate : nplaces_add: " << nplaces_add << std::endl;
-      // rest of chunks are stored on host
-      for (iDev = 0; iDev < nplaces_add; iDev++) {
-        is = (num_chunks_ - chunks_allocated) * (uint_t)iDev /
-             (uint_t)nplaces_add;
-        ie = (num_chunks_ - chunks_allocated) * (uint_t)(iDev + 1) /
-             (uint_t)nplaces_add;
-        nc = ie - is;
-        if (nc > 0) {
-          chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
-          // chunks_.push_back(std::make_shared<HostChunkContainer<data_t>>());
-          // chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
-          chunks_[chunks_.size() - 1]->set_chunk_index(
-              chunk_index_ + chunks_allocated +
-              is); // set first chunk index for the container
-          chunks_[chunks_.size() - 1]->Allocate(
-              iDev, chunk_bits, nqubits, nc, num_buffers, multi_shots_,
-              matrix_bit, max_shots, density_matrix_);
-        }
-      }
-      num_places_ += nplaces_add;
-    }
-
+    
     for (iDev = 0; iDev < num_places_; iDev++)
       chunks_[iDev]->set_place(iDev, num_places_);
 
@@ -410,6 +374,11 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     }
   }
 
+  uint_t freeMem, totalMem;
+  cudaMemGetInfo(&freeMem, &totalMem);
+  std::cout << "ChunkManager::Allocate : after all done : "
+            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
   return num_chunks_;
 }
 

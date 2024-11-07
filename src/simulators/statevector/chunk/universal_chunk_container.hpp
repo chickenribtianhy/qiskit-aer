@@ -341,7 +341,7 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
                                               int matrix_bit, int max_shots,
                                               bool density_matrix) {
 
-  std::cout << "UniversalChunkContainer::Allocate" << std::endl;
+  std::cout << "UniversalChunkContainer::Allocate START" << std::endl;
   uint_t nc = chunks;
   uint_t i;
 
@@ -411,23 +411,6 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
                   sizeof(uint_t) * ((this->num_creg_bits_ + 63) >> 6);
 
   size_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::Allocate : initial status : "
-  //           << "freeMem: " << freeMem * 1.0 / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem * 1.0 / (1024 * 1024 * 1024) <<
-  //           std::endl;
-  freeMem -= RESERVE_FOR_THRUST;
-  while (freeMem <= ((((nc + buffers) * (uint_t)sizeof(thrust::complex<data_t>))
-                      << chunk_bits) +
-                     sizeof(double) * reduce_buffer_size_ * nc +
-                     param_size * (num_matrices_ + buffers))) {
-    nc--;
-    if (num_matrices_ > 1)
-      num_matrices_--;
-    if (nc == 0) {
-      break;
-    }
-  }
 
 #endif
   ResizeMatrixBuffers(matrix_bit, max_shots);
@@ -435,6 +418,9 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
   this->num_chunks_ = nc;
 
   data_.resize((nc + buffers) << chunk_bits);
+
+  // synchronize the 2 gpu
+  // cudaDeviceSynchronize();
 
   cudaMemGetInfo(&freeMem, &totalMem);
   std::cout << "UniversalChunkContainer::Allocate : after data_.resize() : "
@@ -482,14 +468,15 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
   blocked_qubits_holder_.resize(QV_MAX_REGISTERS * size);
 
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::Allocate : after metadata resize() : "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  // std::cout << "UniversalChunkContainer::Allocate : after metadata resize() : "
+  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
   // allocate chunk classes
   ChunkContainer<data_t>::allocate_chunks();
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::Allocate : after allocate_chunks : "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  std::cout << "UniversalChunkContainer::Allocate END "
+            << "device: " << device_id_
+            << " freeMem: " << freeMem / (1024 * 1024 * 1024)
             << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
   return nc;
 }
@@ -509,9 +496,9 @@ void UniversalChunkContainer<data_t>::allocate_creg(uint_t num_mem,
   }
   uint_t freeMem, totalMem;
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::allocate_creg : after cregs resize() : "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  // std::cout << "UniversalChunkContainer::allocate_creg : after cregs resize() : "
+  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -606,10 +593,10 @@ void UniversalChunkContainer<data_t>::ResizeMatrixBuffers(int bits,
     params_.resize(n * params_buffer_size_);
   
   uint_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::ResizeMatrixBuffers : after matrixbuffers resize() : "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  // cudaMemGetInfo(&freeMem, &totalMem);
+  // std::cout << "UniversalChunkContainer::ResizeMatrixBuffers : after matrixbuffers resize() : "
+  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -739,9 +726,9 @@ void UniversalChunkContainer<data_t>::CopyIn(Chunk<data_t> &src, uint_t iChunk) 
 
   uint_t freeMem, totalMem;
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::CopyIn : after copyin(): "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  // std::cout << "UniversalChunkContainer::CopyIn : after copyin(): "
+  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -779,9 +766,9 @@ void UniversalChunkContainer<data_t>::CopyOut(Chunk<data_t> &dest, uint_t iChunk
 
   uint_t freeMem, totalMem;
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::CopyOut : after copyout(): "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  // std::cout << "UniversalChunkContainer::CopyOut : after copyout(): "
+  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -801,9 +788,9 @@ void UniversalChunkContainer<data_t>::CopyIn(thrust::complex<data_t> *src,
 
   uint_t freeMem, totalMem;
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::CopyIn : after copyin(): "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  // std::cout << "UniversalChunkContainer::CopyIn : after copyin(): "
+  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -822,9 +809,9 @@ void UniversalChunkContainer<data_t>::CopyOut(thrust::complex<data_t> *dest,
 
   uint_t freeMem, totalMem;
   cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::CopyOut : after copyout(): "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  // std::cout << "UniversalChunkContainer::CopyOut : after copyout(): "
+  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
