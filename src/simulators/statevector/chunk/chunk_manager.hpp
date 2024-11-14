@@ -22,7 +22,7 @@
 #include <spdlog/spdlog.h>
 
 #include <iostream>
-// #include <thrust/universal_vector.h>
+#include <chrono>
 
 namespace AER {
 namespace QV {
@@ -173,11 +173,15 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
                                       bool density_mat, reg_t &gpus,
                                       bool enable_cuStatevec) {
   std::cout << "ChunkManager::Allocate START" << std::endl;
+
+  auto start = std::chrono::high_resolution_clock::now();
   uint_t num_buffers;
   uint_t iDev;
   uint_t is, ie, nc;
   uint_t i;
   char *str;
+
+  uint_t freeMem, totalMem;
 
   bool hybrid = false;
 #ifdef AER_THRUST_GPU
@@ -321,10 +325,10 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
     // allocate chunk container before parallel loop using push_back to store
     // shared pointer
     for (i = 0; i < num_places_; i++) {
-        std::cout << "ChunkManager::Allocate : num_places_ (i) push_back to chunks_: " << i << std::endl;
+        std::cout << "ChunkManager::Allocate : num_places_(i) push_back to chunks_: " << i << std::endl;
         chunks_.push_back(std::make_shared<UniversalChunkContainer<data_t>>());
     }
-
+    // num_places_ = 1; // for one gpu case
     uint_t chunks_allocated = 0;
     // #pragma omp parallel for if(num_places_ == num_devices_)
     // private(is,ie,nc) reduction(+:chunks_allocated)
@@ -373,12 +377,24 @@ uint_t ChunkManager<data_t>::Allocate(int chunk_bits, int nqubits,
       chunks_[iDev]->unmap_all();
     }
   }
-
-  uint_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "ChunkManager::Allocate : after all done : "
-            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
+  cudaDeviceSynchronize();
+  for (i = 0; i < num_devices_; i++) {
+    cudaSetDevice(i);
+    cudaMemGetInfo(&freeMem, &totalMem);
+    std::cout << "ChunkManager::Allocate : after all done,"
+            << " device: " << i
+            << " freeMem: " << freeMem / (1024 * 1024 * 1024)
             << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+  }
+  // std::cout << "sleeping" << std::endl;
+  // sleep(5);
+  // std::cout << "wake up" << std::endl;
+
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> duration = end - start;
+  std::cout << "ChunkManager::Allocate END, Execution time: " << duration.count() << " seconds" << std::endl;
+
+  // std::cout << "ChunkManager::Allocate END" << std::endl;
   return num_chunks_;
 }
 

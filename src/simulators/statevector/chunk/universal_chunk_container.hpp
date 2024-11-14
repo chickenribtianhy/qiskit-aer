@@ -15,10 +15,6 @@
 #ifndef _qv_universal_chunk_container_hpp_
 #define _qv_universal_chunk_container_hpp_
 
-
-#include <iostream>
-#include <thrust/complex.h>
-
 #include "simulators/statevector/chunk/chunk_container.hpp"
 #include "simulators/statevector/chunk/thrust_kernels.hpp"
 
@@ -31,10 +27,10 @@ namespace thrust_gpu = thrust::cuda;
 namespace thrust_gpu = thrust::hip;
 #endif
 
-#include <iostream>
-
-#include <thrust/system/cuda/memory.h>
 #include <thrust/universal_vector.h>
+
+#include <iostream>
+#include <source_location>
 
 #define AERUniversalVector thrust::universal_vector
 
@@ -61,18 +57,17 @@ protected:
   // #define AERUniversalVector thrust::universal_vector
   //   AERUniversalVector<thrust::complex<data_t>> data_test; // Universal
   //   vector for chunks + buffers
-  
-  AERUniversalVector<thrust::complex<data_t>> data_; 
+  AERUniversalVector<thrust::complex<data_t>> data_;
   // storage for large matrix
   mutable AERUniversalVector<thrust::complex<double>> matrix_;
   // storage for additional parameters
   mutable AERUniversalVector<uint_t> params_;
   // buffer for reduction
-  AERUniversalVector<double> reduce_buffer_;
+  AERDeviceVector<double> reduce_buffer_;
   // buffer used for measure probability
-  AERUniversalVector<double> probability_buffer_;
+  AERDeviceVector<double> probability_buffer_;
 
-  AERUniversalVector<uint_t> cregs_;
+  AERDeviceVector<uint_t> cregs_;
   AERHostVector<uint_t> cregs_host_;
   int device_id_;                 // device index
   std::vector<bool> peer_access_; // to which device accepts peer access
@@ -113,7 +108,7 @@ public:
   uint_t size(void) { return data_.size(); }
   int device(void) { return device_id_; }
 
-  AERUniversalVector<thrust::complex<data_t>> &vector(void) { return data_; }
+  AERDeviceVector<thrust::complex<data_t>> &vector(void) { return data_; }
 
   bool peer_access(int i_dest) {
     if (i_dest < 0) {
@@ -146,8 +141,15 @@ public:
 
   void calculate_matrix_buffer_size(int bits, int shots);
 
-  void set_device(void) const {
+  void set_device(
+    void
+    // const std::source_location location = std::source_location::current()
+    ) const {
 #ifdef AER_THRUST_GPU
+    std::cout << "UniversalChunkContainer::set_device : setting device to: " << device_id_
+              // << "Called by function: " << location.function_name() 
+              << "__cplusplus version: " << __cplusplus << std::endl;
+              << std::endl;
     cudaSetDevice(device_id_);
 #endif
   }
@@ -341,7 +343,7 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
                                               int matrix_bit, int max_shots,
                                               bool density_matrix) {
 
-  std::cout << "UniversalChunkContainer::Allocate START" << std::endl;
+  std::cout << "UniversalChunkContainer::Allocate" << std::endl;
   uint_t nc = chunks;
   uint_t i;
 
@@ -350,10 +352,8 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
 
   this->density_matrix_ = density_matrix;
 
-  if (idev != -1) {
-    device_id_ = idev;
-    set_device();
-  }
+  device_id_ = idev;
+  set_device();
 
 #ifdef AER_THRUST_GPU
   int ip, nd;
@@ -411,6 +411,23 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
                   sizeof(uint_t) * ((this->num_creg_bits_ + 63) >> 6);
 
   size_t freeMem, totalMem;
+  cudaMemGetInfo(&freeMem, &totalMem);
+  // std::cout << "UniversalChunkContainer::Allocate : initial status : "
+  //           << "freeMem: " << freeMem * 1.0 / (1024 * 1024 * 1024)
+  //           << " totalMem: " << totalMem * 1.0 / (1024 * 1024 * 1024) <<
+  //           std::endl;
+  freeMem -= RESERVE_FOR_THRUST;
+  while (freeMem <= ((((nc + buffers) * (uint_t)sizeof(thrust::complex<data_t>))
+                      << chunk_bits) +
+                     sizeof(double) * reduce_buffer_size_ * nc +
+                     param_size * (num_matrices_ + buffers))) {
+    nc--;
+    if (num_matrices_ > 1)
+      num_matrices_--;
+    if (nc == 0) {
+      break;
+    }
+  }
 
 #endif
   ResizeMatrixBuffers(matrix_bit, max_shots);
@@ -419,13 +436,9 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
 
   data_.resize((nc + buffers) << chunk_bits);
 
-  // synchronize the 2 gpu
-  // cudaDeviceSynchronize();
-
   cudaMemGetInfo(&freeMem, &totalMem);
   std::cout << "UniversalChunkContainer::Allocate : after data_.resize() : "
-            << "device: " << device_id_
-            << " freeMem: " << freeMem / (1024 * 1024 * 1024)
+            << "freeMem: " << freeMem / (1024 * 1024 * 1024)
             << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
   // init number of bits for chunk count
   uint_t nc_tmp = this->num_chunks_;
@@ -467,17 +480,9 @@ uint_t UniversalChunkContainer<data_t>::Allocate(int idev, int chunk_bits,
   }
   blocked_qubits_holder_.resize(QV_MAX_REGISTERS * size);
 
-  cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::Allocate : after metadata resize() : "
-  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
   // allocate chunk classes
   ChunkContainer<data_t>::allocate_chunks();
-  cudaMemGetInfo(&freeMem, &totalMem);
-  std::cout << "UniversalChunkContainer::Allocate END "
-            << "device: " << device_id_
-            << " freeMem: " << freeMem / (1024 * 1024 * 1024)
-            << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
+
   return nc;
 }
 
@@ -494,11 +499,6 @@ void UniversalChunkContainer<data_t>::allocate_creg(uint_t num_mem,
     cregs_.resize(num_matrices_ * n64);
     cregs_host_.resize(num_matrices_ * n64);
   }
-  uint_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::allocate_creg : after cregs resize() : "
-  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -591,12 +591,6 @@ void UniversalChunkContainer<data_t>::ResizeMatrixBuffers(int bits,
 
   if (params_.size() < n * params_buffer_size_)
     params_.resize(n * params_buffer_size_);
-  
-  uint_t freeMem, totalMem;
-  // cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::ResizeMatrixBuffers : after matrixbuffers resize() : "
-  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -723,12 +717,6 @@ void UniversalChunkContainer<data_t>::CopyIn(Chunk<data_t> &src, uint_t iChunk) 
   thrust::copy_n(src.pointer(), size,
                  data_.begin() + (iChunk << this->chunk_bits_));
 #endif
-
-  uint_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::CopyIn : after copyin(): "
-  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -763,12 +751,6 @@ void UniversalChunkContainer<data_t>::CopyOut(Chunk<data_t> &dest, uint_t iChunk
   thrust::copy_n(data_.begin() + (iChunk << this->chunk_bits_), size,
                  dest.pointer());
 #endif
-
-  uint_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::CopyOut : after copyout(): "
-  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -784,13 +766,6 @@ void UniversalChunkContainer<data_t>::CopyIn(thrust::complex<data_t> *src,
 
   synchronize(iChunk);
   thrust::copy_n(src, size, data_.begin() + (iChunk << this->chunk_bits_));
-
-
-  uint_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::CopyIn : after copyin(): "
-  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -805,13 +780,6 @@ void UniversalChunkContainer<data_t>::CopyOut(thrust::complex<data_t> *dest,
   }
   synchronize(iChunk);
   thrust::copy_n(data_.begin() + (iChunk << this->chunk_bits_), size, dest);
-
-
-  uint_t freeMem, totalMem;
-  cudaMemGetInfo(&freeMem, &totalMem);
-  // std::cout << "UniversalChunkContainer::CopyOut : after copyout(): "
-  //           << "freeMem: " << freeMem / (1024 * 1024 * 1024)
-  //           << " totalMem: " << totalMem / (1024 * 1024 * 1024) << std::endl;
 }
 
 template <typename data_t>
@@ -890,10 +858,12 @@ template <typename data_t>
 reg_t UniversalChunkContainer<data_t>::sample_measure(
     uint_t iChunk, const std::vector<double> &rnds, uint_t stride, bool dot,
     uint_t count) const {
+  std::cout << "UniversalChunkContainer::sample_measure START" << std::endl;
   const int_t SHOTS = rnds.size();
   reg_t samples(SHOTS, 0);
 
   set_device();
+
 
   strided_range<thrust::complex<data_t> *> iter(
       chunk_pointer(iChunk), chunk_pointer(iChunk + count), stride);
@@ -973,6 +943,7 @@ reg_t UniversalChunkContainer<data_t>::sample_measure(
                         complex_less<data_t>());
   }
 #endif
+  std::cout << "UniversalChunkContainer::sample_measure END" << std::endl;
 
   return samples;
 }
@@ -1014,48 +985,6 @@ void UniversalChunkContainer<data_t>::set_blocked_qubits(uint_t iChunk,
   num_blocked_matrix_[iBlock] = 0;
   num_blocked_qubits_[iBlock] = qubits.size();
 }
-
-// template <typename data_t>
-// class GeneralMatrixMult2x2 : public GateFuncBase<data_t> {
-// protected:
-//   thrust::complex<double> m0_, m1_, m2_, m3_;
-//   uint_t mask_;
-//   uint_t offset_;
-
-// public:
-//   GeneralMatrixMult2x2(const cvector_t<double> &mat, int q, uint_t mask) {
-//     m0_ = mat[0];
-//     m1_ = mat[1];
-//     m2_ = mat[2];
-//     m3_ = mat[3];
-
-//     mask_ = mask;
-
-//     offset_ = 1ull << q;
-//   }
-
-//   __host__ __device__ void operator()(const uint_t &i) const {
-//     uint_t i0, i1;
-//     thrust::complex<data_t> q0, q1;
-//     thrust::complex<data_t> *vec;
-
-//     vec = this->data_;
-
-//     i1 = i & (offset_ - 1);
-//     i0 = (i - i1) << 1;
-//     i0 += i1;
-//     i1 = i0 + offset_;
-
-//     q0 = vec[i0];
-//     q1 = vec[i1];
-
-//     if ((i0 & mask_) == mask_)
-//       vec[i0] = m0_ * q0 + m2_ * q1;
-//     if ((i1 & mask_) == mask_)
-//       vec[i1] = m1_ * q0 + m3_ * q1;
-//   }
-//   const char *name(void) { return "general_mult2x2"; }
-// };
 
 // queue gate for blocked execution
 template <typename data_t>
@@ -1170,203 +1099,6 @@ void UniversalChunkContainer<data_t>::queue_blocked_gate(
 #endif
 }
 
-// #ifdef AER_THRUST_GPU
-
-// template <typename data_t>
-// __global__ void
-// dev_apply_register_blocked_gates(thrust::complex<data_t> *data, int num_gates,
-//                                  int num_qubits, int num_matrix, uint_t *qubits,
-//                                  BlockedGateParams *params,
-//                                  thrust::complex<double> *matrix) {
-//   uint_t i, idx, ii, t, offset;
-//   uint_t j, laneID, iPair;
-//   thrust::complex<data_t> q, qp, qt;
-//   thrust::complex<double> m0, m1;
-//   data_t qr, qi;
-//   int nElem;
-//   thrust::complex<double> *matrix_load;
-
-//   i = blockIdx.x * blockDim.x + threadIdx.x;
-//   laneID = i & (_WS - 1);
-
-//   // index for this thread
-//   idx = 0;
-//   ii = i >> num_qubits;
-//   for (j = 0; j < num_qubits; j++) {
-//     offset = (1ull << qubits[j]);
-//     t = ii & (offset - 1);
-//     idx += t;
-//     ii = (ii - t) << 1;
-
-//     if (((laneID >> j) & 1) != 0) {
-//       idx += offset;
-//     }
-//   }
-//   idx += ii;
-
-//   q = data[idx];
-
-//   // prefetch
-//   if (threadIdx.x < num_matrix)
-//     m0 = matrix[threadIdx.x];
-
-//   for (j = 0; j < num_gates; j++) {
-//     iPair = laneID ^ (1ull << params[j].qubit_);
-
-//     matrix_load = matrix;
-//     nElem = 0;
-
-//     switch (params[j].gate_) {
-//     case 'x':
-//       m0 = 0.0;
-//       m1 = 1.0;
-//       break;
-//     case 'y':
-//       m0 = 0.0;
-//       if (iPair > laneID)
-//         m1 = thrust::complex<double>(0.0, -1.0);
-//       else
-//         m1 = thrust::complex<double>(0.0, 1.0);
-//       break;
-//     case 'p':
-//       nElem = 1;
-//       matrix += 1;
-//       m1 = 0.0;
-//       break;
-//     case 'd':
-//       nElem = 2;
-//       matrix += 2;
-//       m1 = 0.0;
-//       break;
-//     default:
-//       nElem = 4;
-//       matrix += 4;
-//       break;
-//     }
-
-//     if (iPair < laneID) {
-//       matrix_load += (nElem >> 1);
-//     }
-//     if (nElem > 0)
-//       m0 = *(matrix_load);
-//     if (nElem > 2)
-//       m1 = *(matrix_load + 1);
-
-//     // warp shuffle to get pair amplitude
-//     qr = __shfl_sync(0xffffffff, q.real(), iPair, 32);
-//     qi = __shfl_sync(0xffffffff, q.imag(), iPair, 32);
-//     qp = thrust::complex<data_t>(qr, qi);
-//     qt = m0 * q + m1 * qp;
-
-//     if ((idx & params[j].mask_) == params[j].mask_) { // handling control bits
-//       q = qt;
-//     }
-//   }
-
-//   data[idx] = q;
-// }
-
-// template <typename data_t>
-// __global__ void
-// dev_apply_shared_memory_blocked_gates(thrust::complex<data_t> *data,
-//                                       int num_gates, int num_qubits,
-//                                       uint_t *qubits, BlockedGateParams *params,
-//                                       thrust::complex<double> *matrix) {
-//   __shared__ thrust::complex<data_t> buf[1024];
-//   uint_t i, idx, ii, t, offset;
-//   uint_t j, laneID, iPair;
-//   thrust::complex<data_t> q, qp;
-//   thrust::complex<double> m0, m1;
-//   data_t qr, qi;
-//   int nElem;
-//   thrust::complex<double> *matrix_load;
-
-//   i = blockIdx.x * blockDim.x + threadIdx.x;
-
-//   laneID = threadIdx.x;
-
-//   // index for this thread
-//   idx = 0;
-//   ii = i >> num_qubits;
-//   for (j = 0; j < num_qubits; j++) {
-//     offset = (1ull << qubits[j]);
-//     t = ii & (offset - 1);
-//     idx += t;
-//     ii = (ii - t) << 1;
-
-//     if (((laneID >> j) & 1) != 0) {
-//       idx += offset;
-//     }
-//   }
-//   idx += ii;
-
-//   q = data[idx];
-
-//   for (j = 0; j < num_gates; j++) {
-//     iPair = laneID ^ (1ull << params[j].qubit_);
-
-//     if (params[j].qubit_ < 5) {
-//       // warp shuffle to get pair amplitude
-//       qr = q.real();
-//       qi = q.imag();
-//       qr = __shfl_sync(0xffffffff, qr, iPair & (_WS - 1), 32);
-//       qi = __shfl_sync(0xffffffff, qi, iPair & (_WS - 1), 32);
-//       qp = thrust::complex<data_t>(qr, qi);
-//     } else {
-//       __syncthreads();
-//       buf[laneID] = q;
-//       __syncthreads();
-//       qp = buf[iPair];
-//     }
-
-//     matrix_load = matrix;
-//     nElem = 0;
-
-//     switch (params[j].gate_) {
-//     case 'x':
-//       m0 = 0.0;
-//       m1 = 1.0;
-//       break;
-//     case 'y':
-//       m0 = 0.0;
-//       if (iPair > laneID)
-//         m1 = thrust::complex<double>(0.0, -1.0);
-//       else
-//         m1 = thrust::complex<double>(0.0, 1.0);
-//       break;
-//     case 'p':
-//       nElem = 1;
-//       matrix += 1;
-//       m1 = 0.0;
-//       break;
-//     case 'd':
-//       nElem = 2;
-//       matrix += 2;
-//       m1 = 0.0;
-//       break;
-//     default:
-//       nElem = 4;
-//       matrix += 4;
-//       break;
-//     }
-
-//     if (iPair < laneID) {
-//       matrix_load += (nElem >> 1);
-//     }
-//     if (nElem > 0)
-//       m0 = *(matrix_load);
-//     if (nElem > 2)
-//       m1 = *(matrix_load + 1);
-
-//     if ((idx & params[j].mask_) == params[j].mask_) { // handling control bits
-//       q = m0 * q + m1 * qp;
-//     }
-//   }
-
-//   data[idx] = q;
-// }
-
-// #endif
 
 // do all gates stored in queue
 template <typename data_t>

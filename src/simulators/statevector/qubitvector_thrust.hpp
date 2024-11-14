@@ -888,6 +888,7 @@ uint_t QubitVectorThrust<data_t>::chunk_setup(int chunk_bits, int num_qubits,
         chunk_bits, num_qubits, num_local_chunks, chunk_index_,
         max_matrix_bits_, max_sampling_shots_, is_density_matrix(),
         target_gpus_, cuStateVec_enable_);
+    std::cout << "QubitVectorThrust::chunk_setup : END of chunk_manager_->Allocate" << std::endl;
   }
 
   multi_chunk_distribution_ = false;
